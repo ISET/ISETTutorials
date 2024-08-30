@@ -12,6 +12,20 @@
 %
 %    In other tutorials we will unpack in more detail the processing
 %    elements that make up this chain.
+%
+%    This tutorial is available in the github repository 
+%      https://github.com/ISET/ISETTutorials.git
+%    It is in folder
+%      ISETBio/RGBImageToExcitations/t_RGBImageToExcitations.m
+%
+%    You will need ISETCam and ISETBio installed, and you should also put
+%    the ISETTutorials repository on your path.
+%       https://github.com/ISET/ISETCam.git
+%       https://github.com/ISETBio/ISETBio.git
+%
+%    If you use the ToolboxToolbox (see https://github.com/ToolboxHub/ToolboxToolbox.git), you
+%    can configure in one step with the Matlab command
+%      tbUse('ISETTutorials');
 
 
 %% Initialize and clear
@@ -20,10 +34,16 @@ clear; close all; ieInit;
 %% Set sample wavelengths
 wave = 400:5:700;
 
-%% Create scene from image file
+%% Create scene object from image file
 % 
 % Here will will build the scene from a stock RGB image, and
-% a "typical" display.
+% a "typical" display.  We need to assume some display in order
+% to interpret the RGB values in physical units.  ISETCam/Bio
+% has data on a number of displays. Here we use measurements we
+% made at some point of an Apple LCD display.  If you were modeling
+% an experiment you did on a calibrated display, you would specify
+% a file describing your display.  A later tutorial will discuss
+% the ISETCam/Bio display object in more detail.
 %
 % Although sceneFromFile will read the scene directly and create
 % the image, we sometimes want a higher pixel resolution so we read and
@@ -43,10 +63,13 @@ wave = 400:5:700;
 imgFileName = 'zebra.jpg';              
 dispLCDFile = 'LCD-Apple.mat';
 upsampleFactor = 1;
-fieldOfViewDegs = 1;
+viewingDistanceMeters = 1;
+fieldOfViewWidthDegs = 2;
 sceneLuminanceCdM2 = 200;
 
-% Read and resize the RGB image.
+% Read and resize the RGB image.  You don't need to resize this,
+% just doing it here to illustrate the idea that the conversion
+% to scene works with however may pixels you have.
 im = imread(imgFileName);
 im = imresize(im,upsampleFactor);
 
@@ -56,32 +79,50 @@ im = imresize(im,upsampleFactor);
 % spectra.
 sc = sceneFromFile(im,'rgb',[],dispLCDFile,wave);
 
-% Then set the scene parameters we want to adjust
+% Then set the scene parameters we want to adjust.  These
+% parameters aren't associated with a typical RGB image,
+% so we move ourselves into physical units by setting them
+% right after we create the scene from the RGB image.
+%
+% The set on 'fov' determines the width and takes the distance into
+% account. The height is determined by the aspect ratio of the underlying
+% image.
 sc = sceneSet(sc,'name','Scene on LCD');
-sc = sceneSet(sc,'fov',fieldOfViewDegs');
+sc = sceneSet(sc,'distance',viewingDistanceMeters);
+sc = sceneSet(sc,'fov',fieldOfViewWidthDegs');
 sc = sceneSet(sc,'mean luminance',sceneLuminanceCdM2);
+scSizeDegs = [sceneGet(sc,'fov horizontal') sceneGet(sc,'fov vertical')];
+fprintf('Retinal image size is %0.1f by %0.1f degrees\n',scSizeDegs(1),scSizeDegs(2));
 
 % The ieAddObject followed by sceneWindow bring up a simple
 % gui that allows visualization of the scene.
+%
+% Note that once we create the scene, the display information
+% is not associated with it.  Rather the scene stores the image
+% data as the spectra at each pixel.
+%
+% A later tutorial will unpack ISETCam/Bio scenes in more detail.
 ieAddObject(sc); sceneWindow;
 
-%% Compute and show the oi
+%% Set up oi object for computing the retinal image
 %
 % The term oi stands for optical image, and here that
 % means the retinal image.  
 %
-% We get some reasonable human optics by default.  We
-% can dial in other optics from various databases that
-% are included in ISETBio.
+% We get some reasonable human optics by default.  These
+% are based on published human wavefront optics measurements
+% for foveal viewing. We can dial in other optics from various
+% databases that are included in ISETBio.  We will discuss how
+% to do this, and the various parameters of the oi in a later
+% tutorial.
+%
+% Note that we set the wavelengthe support of the oi to match
+% that we used for the scene.  
 oi = oiCreate('human');
 oi = oiSet(oi,'wave',wave);
-oi = oiCompute(oi, sc,'pad value','mean');
-oiSizeDegs = [oiGet(oi,'w angular') oiGet(oi,'h angular')];
 
-% As with the scene, we can have a look through a gui.
-ieAddObject(oi); oiWindow;
-
-%% Plot the polychromatic point spread function at sample wavelengths
+% Plot the default foveal polychromatic point spread function at
+% some sample wavelengths
 %
 % Probably we have some way to do this in one simple call, but if
 % so I couldn't easily find it.  So just make the plot we want 
@@ -100,17 +141,39 @@ for i = 1:length(plotWls)
     title(sprintf('PSF at %d nm',plotWls(i)));
 end
 
+%% omputes the retinal image from the scene, using the oi
+%
+% The retinal image is computed at each wavelength with a polychromatic
+% point spread function that takes typical human axial chromatic aberration
+% into account, as shown above.  The spectral absorption of light by the
+% lens is also taken into account.
+%
+% At the edge of the scene, we need to make some assumption about what is
+% outside the scene. Here we tell the compute method to pad outside the
+% scene image by its mean value at each wavelength.  The padding makes the
+% retinal image larger than the scene.
+oi = oiCompute(oi, sc,'pad value','mean');
+oiSizeDegs = [oiGet(oi,'w angular') oiGet(oi,'h angular')];
+fprintf('Scene size is %0.1f by %0.1f degrees\n',oiSizeDegs(1),oiSizeDegs(2));
+
+% As with the scene, we can have a look through a gui.  It looks yellower
+% than the scene because the lens aborbs more light at shorter wavelengths.
+ieAddObject(oi); oiWindow;
+
 %% Build a default cone mosaic and compute isomerizatoins
 %
-% Get the default set of cone mosaic parameters and
-% set the ones we want. We match the aspect ratio
-% of the mosaic to the oi, which itself is a bit
+% Get the default set of cone mosaic parameters and set the ones we want.
+% We match the aspect ratio of the mosaic to the oi, which itself is a bit
 % larger than the scene.
 %
 % We place the mosaic at the fovea, but you can move it around
 % with the eccentricity parameters.  The default integration time
 % is 5 msec, which is good for dynamic calculations but not so
 % good for single images, so we change to 100 msec.
+%
+% If you do move to some other eccentricity, you would want to select
+% optics matched for that eccentricity.  We will unpack how to do this in a
+% later tutorial.
 cmParams = cMosaicParams;
 cmParams.integrationTime = 100;
 cmParams.eccentricityDegs = [0 0];
@@ -124,28 +187,38 @@ cm = cMosaic(cmParams);
 cm.visualize;
 
 %% Compute cone photopigment excitations
-[noiseFree, noisy] = cm.compute(oi);
+%
+% The noise free responses are the mean excitations for each cone.  The noisy
+% responses at Poisson-distributed noise to the mean excitations.
+[noiseFreeExcitationList, noisyExcitationList] = cm.compute(oi);
 
 %% Visualize excitations
 %
 % The plot command commented out here is simple but
 % does not give much flexibility
-cm.plot('excitations',noiseFree,'labelcones',true);
+cm.plot('excitations',noiseFreeExcitationList,'labelcones',true);
 
 % The visualize command has many options but is more
 % complex to use.
 vParams = cm.visualize('params');
-vParams.activation = noisy;
+vParams.activation = noisyExcitationList;
 vParams.activationColorMap = gray(512);
 vParams.verticalActivationColorBar = true;
-vParams.activationRange = [0 max(noisy(:))];
+vParams.activationRange = [0 max(noisyExcitationList(:))];
 vParams.labelcones = false;
 cm.visualize(vParams);
 
+% That image looks low contrast because the S cones occupy
+% a different intensity range than the L and M cones.  We
+% can adjust this by setting the range to the central portion
+% of the cone excitation response range as shown here.
+vParams.activationRange = prctile(noisyExcitationList(:),[5 90]);
+cm.visualize(vParams);
+
 % Here are some slices through the acivations
-cm.plot('excitations horizontal line',noiseFree, 'y deg',0,'thickness',0.05,'conetype','l');
-cm.plot('excitations horizontal line',noiseFree, 'y deg',0,'thickness',0.05,'conetype','m');
-cm.plot('excitations horizontal line',noiseFree, 'y deg',0,'thickness',0.05,'conetype','s');
+cm.plot('excitations horizontal line',noiseFreeExcitationList, 'y deg',0,'thickness',0.05,'conetype','l');
+cm.plot('excitations horizontal line',noiseFreeExcitationList, 'y deg',0,'thickness',0.05,'conetype','m');
+cm.plot('excitations horizontal line',noiseFreeExcitationList, 'y deg',0,'thickness',0.05,'conetype','s');
 
 %% Unpack what's in the mosaic a little
 %
@@ -153,7 +226,10 @@ cm.plot('excitations horizontal line',noiseFree, 'y deg',0,'thickness',0.05,'con
 % A little sleuthing will be required to decide
 % which is horizontal and which is vertical.
 %
-% The actual excitations noiseFree, noisy are in a list ordered as the two lists below.
+% The actual excitations in noiseFree and noisy are in a list ordered as the two lists below.
+% The first coordinate is the x (horizontal) position of the cone, the
+% second is the y.  A later tutorial will unpack the coordinate system used
+% for retinal position.
 conePositionsMicrons = cm.coneRFpositionsMicrons;
 
 % Cone types
