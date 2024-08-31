@@ -22,11 +22,12 @@
 %    the ISETTutorials repository on your path.
 %       https://github.com/ISET/ISETCam.git
 %       https://github.com/ISETBio/ISETBio.git
+%    Go to the wiki pages for these two repositories for detailed
+%    instructions on how to install these two packages - it's easy!
 %
 %    If you use the ToolboxToolbox (see https://github.com/ToolboxHub/ToolboxToolbox.git), you
 %    can configure in one step with the Matlab command
 %      tbUse('ISETTutorials');
-
 
 %% Initialize and clear
 clear; close all; ieInit;
@@ -89,7 +90,7 @@ sc = sceneFromFile(im,'rgb',[],dispLCDFile,wave);
 % image.
 sc = sceneSet(sc,'name','Scene on LCD');
 sc = sceneSet(sc,'distance',viewingDistanceMeters);
-sc = sceneSet(sc,'fov',fieldOfViewWidthDegs');
+sc = sceneSet(sc,'fov',fieldOfViewWidthDegs);
 sc = sceneSet(sc,'mean luminance',sceneLuminanceCdM2);
 scSizeDegs = [sceneGet(sc,'fov horizontal') sceneGet(sc,'fov vertical')];
 fprintf('Retinal image size is %0.1f by %0.1f degrees\n',scSizeDegs(1),scSizeDegs(2));
@@ -102,7 +103,7 @@ fprintf('Retinal image size is %0.1f by %0.1f degrees\n',scSizeDegs(1),scSizeDeg
 % data as the spectra at each pixel.
 %
 % A later tutorial will unpack ISETCam/Bio scenes in more detail.
-ieAddObject(sc); sceneWindow;
+sceneWindow(sc);
 
 %% Set up oi object for computing the retinal image
 %
@@ -141,7 +142,7 @@ for i = 1:length(plotWls)
     title(sprintf('PSF at %d nm',plotWls(i)));
 end
 
-%% omputes the retinal image from the scene, using the oi
+%% Computes the retinal image from the scene, using the oi
 %
 % The retinal image is computed at each wavelength with a polychromatic
 % point spread function that takes typical human axial chromatic aberration
@@ -152,15 +153,15 @@ end
 % outside the scene. Here we tell the compute method to pad outside the
 % scene image by its mean value at each wavelength.  The padding makes the
 % retinal image larger than the scene.
-oi = oiCompute(oi, sc,'pad value','mean');
+oi = oiCompute(oi, sc,'pad value','mean', 'crop', true);
 oiSizeDegs = [oiGet(oi,'w angular') oiGet(oi,'h angular')];
 fprintf('Scene size is %0.1f by %0.1f degrees\n',oiSizeDegs(1),oiSizeDegs(2));
 
 % As with the scene, we can have a look through a gui.  It looks yellower
 % than the scene because the lens aborbs more light at shorter wavelengths.
-ieAddObject(oi); oiWindow;
+oiWindow(oi);
 
-%% Build a default cone mosaic and compute isomerizatoins
+%% Build a default cone mosaic and compute excitations
 %
 % Get the default set of cone mosaic parameters and set the ones we want.
 % We match the aspect ratio of the mosaic to the oi, which itself is a bit
@@ -175,7 +176,7 @@ ieAddObject(oi); oiWindow;
 % optics matched for that eccentricity.  We will unpack how to do this in a
 % later tutorial.
 cmParams = cMosaicParams;
-cmParams.integrationTime = 100;
+cmParams.integrationTime = 0.100;
 cmParams.eccentricityDegs = [0 0];
 cmParams.sizeDegs = oiSizeDegs;
 cmParams.micronsPerDegree = oiGet(oi,'distance per degree','um');
@@ -229,20 +230,19 @@ cm.plot('excitations horizontal line',noiseFreeExcitationList, 'y deg',0,'thickn
 % The actual excitations in noiseFree and noisy are in a list ordered as the two lists below.
 % The first coordinate is the x (horizontal) position of the cone, the
 % second is the y.  A later tutorial will unpack the coordinate system used
-% for retinal position.
+% for retinal position. As the variable names suggests, these are in
+% microns.
 conePositionsMicrons = cm.coneRFpositionsMicrons;
 
 % Cone types
 %
-% LMS coded as 1, 2, and 3
+% LMS coded as 1, 2, and 3 respectively.
 coneTypes = cm.coneTypes;
 
 % The continuous LMS images.  As they sit in the
 % cMosaic property, they are up down flipped to
 % match what happens with real retinal images.  Useful
 % flip back.
-LMSImages = cm.absorptionsDensityFullMap;
-LMSImages = LMSImages(end:-1:1,:,:);
-figure; clf; imshow(LMSImages/max(LMSImages(:)));
+8;
 
 %% END
